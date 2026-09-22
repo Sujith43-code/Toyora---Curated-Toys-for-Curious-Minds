@@ -25,6 +25,25 @@ async function initDB() {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Normalize path for serverless / Netlify function redirects where /api might be stripped
+app.use((req, res, next) => {
+  if (req.url && !req.url.startsWith('/api') && (
+    req.url.startsWith('/auth') || 
+    req.url.startsWith('/products') || 
+    req.url.startsWith('/categories') || 
+    req.url.startsWith('/orders') || 
+    req.url.startsWith('/inventory') || 
+    req.url.startsWith('/reviews') || 
+    req.url.startsWith('/customers') || 
+    req.url.startsWith('/settings') || 
+    req.url.startsWith('/health') ||
+    req.url === '/'
+  )) {
+    req.url = '/api' + (req.url === '/' ? '/health' : req.url);
+  }
+  next();
+});
+
 // Basic CORS support
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
