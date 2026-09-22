@@ -1,0 +1,6 @@
+{
+  "name": "Toyora - Curated Toys for Curious Minds",
+  "description": "A modern, carefully curated toy shop designed around playful discovery, age-based browsing, educational collections, and parent confidence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
