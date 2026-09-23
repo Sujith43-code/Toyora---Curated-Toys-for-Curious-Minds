@@ -5,7 +5,6 @@ import {
 } from '../types';
 import { productService } from '../services/productService';
 import { orderService } from '../services/orderService';
-import { getAdminToken } from '../lib/api';
 
 interface Toast {
   id: string;
@@ -183,17 +182,10 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const refreshOrders = async () => {
     try {
-      const token = getAdminToken();
-      if (!token) {
-        setOrders([]);
-        return;
-      }
       const list = await orderService.getOrders();
       setOrders(list);
     } catch (err: any) {
-      if (err?.status !== 401 && err?.status !== 403) {
-        console.error('Failed to load orders in context:', err);
-      }
+      console.error('Failed to load orders in context:', err);
     }
   };
 
@@ -374,59 +366,61 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }));
   };
 
-  // Place Order (via backend API)
+  // Place Order
   const placeOrder = async (
     details: OrderCustomerDetails, 
     paymentMethod: 'upi' | 'card' | 'netbanking' | 'cod'
   ): Promise<Order> => {
-    const itemsPayload = cart.map(i => ({
-      productId: i.product.id,
-      quantity: i.quantity
-    }));
+    const subtotal = cartSubtotal;
+    const shipping = subtotal >= freeShippingThreshold ? 0 : 99;
+    const total = subtotal + shipping;
 
     const createdOrder = await orderService.createOrder({
-      customer: details,
-      items: itemsPayload,
+      items: cart,
+      customerName: details.fullName,
+      customerEmail: details.email,
+      customerPhone: details.phone,
+      shippingAddress: {
+        line1: details.addressLine1,
+        city: details.city,
+        state: details.state,
+        pincode: details.pincode
+      },
       paymentMethod,
-      isGift: details.isGift,
-      giftMessage: details.giftMessage,
-      deliveryNotes: details.deliveryNotes
+      subtotal,
+      shipping,
+      total,
+      customerDetails: details
     });
 
     setOrders(prev => [createdOrder, ...prev]);
     clearCart();
-    // Refresh products to ensure updated stock levels from backend
     refreshProducts();
     return createdOrder;
   };
 
-  // Create Order (convenience helper for checkout via backend API)
+  // Create Order (convenience helper for checkout)
   const createOrder = async (params: CreateOrderParams): Promise<Order> => {
-    const itemsPayload = cart.map(i => ({
-      productId: i.product.id,
-      quantity: i.quantity
-    }));
-
-    const customerDetails = {
-      fullName: params.customerName,
-      email: params.customerEmail,
-      phone: params.customerPhone,
-      addressLine1: params.shippingAddress.line1,
-      city: params.shippingAddress.city,
-      state: params.shippingAddress.state,
-      pincode: params.shippingAddress.pincode
-    };
+    const subtotal = cartSubtotal;
+    const shipping = subtotal >= freeShippingThreshold ? 0 : 99;
+    const discount = params.discountApplied || 0;
+    const total = subtotal + shipping - discount;
 
     const createdOrder = await orderService.createOrder({
-      customer: customerDetails,
-      items: itemsPayload,
+      items: cart,
+      customerName: params.customerName,
+      customerEmail: params.customerEmail,
+      customerPhone: params.customerPhone,
+      shippingAddress: params.shippingAddress,
       paymentMethod: params.paymentMethod,
-      discount: params.discountApplied
+      subtotal,
+      shipping,
+      discount,
+      total
     });
 
     setOrders(prev => [createdOrder, ...prev]);
     clearCart();
-    // Refresh products to get updated stock counts
     refreshProducts();
     return createdOrder;
   };

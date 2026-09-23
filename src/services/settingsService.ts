@@ -1,5 +1,3 @@
-import { api } from '../lib/api';
-
 export interface StoreSettings {
   storeName: string;
   storeEmail: string;
@@ -34,61 +32,31 @@ const DEFAULT_SETTINGS: StoreSettings = {
   orderDispatchAlerts: true
 };
 
+const STORAGE_KEY = 'toyora_store_settings';
+
 class SettingsService {
   public async getSettings(): Promise<StoreSettings> {
     try {
-      const res = await api.get('/settings');
-      if (res.success && res.data) {
-        return {
-          storeName: res.data.storeName || DEFAULT_SETTINGS.storeName,
-          storeEmail: res.data.storeEmail || DEFAULT_SETTINGS.storeEmail,
-          supportPhone: res.data.supportPhone || DEFAULT_SETTINGS.supportPhone,
-          currency: res.data.currency || DEFAULT_SETTINGS.currency,
-          currencySymbol: res.data.currencySymbol || DEFAULT_SETTINGS.currencySymbol,
-          freeShippingThreshold: Number(res.data.freeShippingThreshold ?? DEFAULT_SETTINGS.freeShippingThreshold),
-          standardDeliveryFee: Number(res.data.standardDeliveryFee ?? DEFAULT_SETTINGS.standardDeliveryFee),
-          estimatedDeliveryDays: res.data.estimatedDeliveryDays || DEFAULT_SETTINGS.estimatedDeliveryDays,
-          enableCod: res.data.enableCod ?? DEFAULT_SETTINGS.enableCod,
-          enableUpi: res.data.enableUpi ?? DEFAULT_SETTINGS.enableUpi,
-          enableCards: res.data.enableCards ?? DEFAULT_SETTINGS.enableCards,
-          lowStockAlertThreshold: Number(res.data.lowStockAlertThreshold ?? DEFAULT_SETTINGS.lowStockAlertThreshold),
-          emailNotifications: res.data.emailNotifications ?? DEFAULT_SETTINGS.emailNotifications,
-          orderDispatchAlerts: res.data.orderDispatchAlerts ?? DEFAULT_SETTINGS.orderDispatchAlerts
-        };
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return { ...DEFAULT_SETTINGS, ...parsed };
       }
-      return DEFAULT_SETTINGS;
-    } catch (error) {
-      console.error('Failed to fetch settings from API:', error);
-      return DEFAULT_SETTINGS;
+    } catch (e) {
+      console.error('Error loading settings from localStorage:', e);
     }
+    return DEFAULT_SETTINGS;
   }
 
   public async updateSettings(updates: Partial<StoreSettings>): Promise<StoreSettings> {
+    const current = await this.getSettings();
+    const updated = { ...current, ...updates };
     try {
-      const res = await api.put('/settings', updates);
-      if (res.success && res.data) {
-        return {
-          storeName: res.data.storeName || DEFAULT_SETTINGS.storeName,
-          storeEmail: res.data.storeEmail || DEFAULT_SETTINGS.storeEmail,
-          supportPhone: res.data.supportPhone || DEFAULT_SETTINGS.supportPhone,
-          currency: res.data.currency || DEFAULT_SETTINGS.currency,
-          currencySymbol: res.data.currencySymbol || DEFAULT_SETTINGS.currencySymbol,
-          freeShippingThreshold: Number(res.data.freeShippingThreshold ?? DEFAULT_SETTINGS.freeShippingThreshold),
-          standardDeliveryFee: Number(res.data.standardDeliveryFee ?? DEFAULT_SETTINGS.standardDeliveryFee),
-          estimatedDeliveryDays: res.data.estimatedDeliveryDays || DEFAULT_SETTINGS.estimatedDeliveryDays,
-          enableCod: res.data.enableCod ?? DEFAULT_SETTINGS.enableCod,
-          enableUpi: res.data.enableUpi ?? DEFAULT_SETTINGS.enableUpi,
-          enableCards: res.data.enableCards ?? DEFAULT_SETTINGS.enableCards,
-          lowStockAlertThreshold: Number(res.data.lowStockAlertThreshold ?? DEFAULT_SETTINGS.lowStockAlertThreshold),
-          emailNotifications: res.data.emailNotifications ?? DEFAULT_SETTINGS.emailNotifications,
-          orderDispatchAlerts: res.data.orderDispatchAlerts ?? DEFAULT_SETTINGS.orderDispatchAlerts
-        };
-      }
-      throw new Error(res.message || 'Failed to update store settings');
-    } catch (error: any) {
-      console.error('Failed to update settings:', error);
-      throw error;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.error('Error saving settings to localStorage:', e);
     }
+    return updated;
   }
 }
 

@@ -1,5 +1,5 @@
 import { ProductCategory } from '../types';
-import { api } from '../lib/api';
+import { PRODUCT_CATEGORIES } from '../data/categories';
 
 export interface AdminCategory {
   id: string;
@@ -12,71 +12,82 @@ export interface AdminCategory {
   status: 'active' | 'archived';
 }
 
-export function mapCategoryFromApi(cat: any): AdminCategory {
-  const id = cat.slug || (cat._id ? String(cat._id) : cat.id);
-  return {
-    id,
-    name: cat.name as ProductCategory,
-    slug: cat.slug || String(cat.name).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-    description: cat.description || '',
-    ageBracketFocus: cat.ageBracketFocus || '0–12 Years',
-    productCount: Number(cat.productCount ?? 0),
-    featuredImage: cat.featuredImage || 'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&q=80&w=600',
-    status: cat.status || 'active',
-  };
+const STORAGE_KEY = 'toyora_admin_categories';
+
+function getStoredCategories(): AdminCategory[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading categories from localStorage:', e);
+  }
+
+  // Default categories from PRODUCT_CATEGORIES
+  return PRODUCT_CATEGORIES.map((catName, idx) => ({
+    id: `cat_${idx + 1}`,
+    name: catName,
+    slug: catName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    description: `Curated collection of ${catName} essentials.`,
+    ageBracketFocus: '0–12 Years',
+    productCount: 4,
+    featuredImage: 'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&q=80&w=600',
+    status: 'active'
+  }));
+}
+
+function saveStoredCategories(categories: AdminCategory[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(categories));
+  } catch (e) {
+    console.error('Error saving categories to localStorage:', e);
+  }
 }
 
 class CategoryService {
   public async getCategories(): Promise<AdminCategory[]> {
-    try {
-      const res = await api.get('/categories');
-      if (res.success && Array.isArray(res.data)) {
-        return res.data.map(mapCategoryFromApi);
-      }
-      return [];
-    } catch (error) {
-      console.error('Failed to fetch categories from API:', error);
-      return [];
-    }
+    return getStoredCategories();
   }
 
   public async createCategory(data: Omit<AdminCategory, 'id' | 'productCount'>): Promise<AdminCategory> {
-    try {
-      const res = await api.post('/categories', data);
-      if (res.success && res.data) {
-        return mapCategoryFromApi(res.data);
-      }
-      throw new Error(res.message || 'Failed to create category');
-    } catch (error: any) {
-      console.error('Failed to create category:', error);
-      throw error;
-    }
+    const categories = getStoredCategories();
+    const newId = `cat_${Date.now()}`;
+    const newCat: AdminCategory = {
+      ...data,
+      id: newId,
+      productCount: 0,
+      slug: data.slug || data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    };
+    categories.push(newCat);
+    saveStoredCategories(categories);
+    return newCat;
   }
 
   public async updateCategory(id: string, updates: Partial<AdminCategory>): Promise<AdminCategory | null> {
-    try {
-      const res = await api.put(`/categories/${encodeURIComponent(id)}`, updates);
-      if (res.success && res.data) {
-        return mapCategoryFromApi(res.data);
-      }
-      return null;
-    } catch (error) {
-      console.error(`Failed to update category ${id}:`, error);
-      return null;
-    }
+    const categories = getStoredCategories();
+    const index = categories.findIndex(c => c.id === id || c.slug === id.toLowerCase());
+    if (index === -1) return null;
+
+    const updated: AdminCategory = {
+      ...categories[index],
+      ...updates,
+      id: categories[index].id
+    };
+    categories[index] = updated;
+    saveStoredCategories(categories);
+    return updated;
   }
 
   public async deleteCategory(id: string): Promise<boolean> {
-    try {
-      const res = await api.delete(`/categories/${encodeURIComponent(id)}`);
-      if (!res.success && res.message) {
-        throw new Error(res.message);
-      }
-      return Boolean(res.success);
-    } catch (error: any) {
-      console.error(`Failed to delete category ${id}:`, error);
-      throw error;
-    }
+    const categories = getStoredCategories();
+    const filtered = categories.filter(c => c.id !== id && c.slug !== id.toLowerCase());
+    if (filtered.length === categories.length) return false;
+    saveStoredCategories(filtered);
+    return true;
   }
 }
 

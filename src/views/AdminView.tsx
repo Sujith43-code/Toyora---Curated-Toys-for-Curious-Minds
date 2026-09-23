@@ -3,10 +3,8 @@ import { useStore } from '../context/StoreContext';
 import { Product, Order, OrderStatus } from '../types';
 import { productService } from '../services/productService';
 import { orderService } from '../services/orderService';
-import { authService, AdminUser } from '../services/authService';
 import { AdminSidebar, AdminTab } from '../components/admin/AdminSidebar';
 import { AdminTopbar } from '../components/admin/AdminTopbar';
-import { AdminLogin } from '../components/admin/AdminLogin';
 import { DashboardTab } from '../components/admin/tabs/DashboardTab';
 import { ProductsTab } from '../components/admin/tabs/ProductsTab';
 import { OrdersTab } from '../components/admin/tabs/OrdersTab';
@@ -21,13 +19,9 @@ import { DeleteConfirmModal } from '../components/admin/DeleteConfirmModal';
 import { OrderDetailDrawer } from '../components/admin/OrderDetailDrawer';
 import { CustomerDetailDrawer } from '../components/admin/CustomerDetailDrawer';
 import { AdminCustomer } from '../services/customerService';
-import { Loader2 } from 'lucide-react';
 
 export const AdminView: React.FC = () => {
-  const { products, orders, deleteProduct: contextDeleteProduct, setProducts } = useStore();
-
-  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const { products, deleteProduct: contextDeleteProduct, setProducts } = useStore();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -42,56 +36,30 @@ export const AdminView: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomer | null>(null);
 
-  const [localOrders, setLocalOrders] = useState<Order[]>(orders);
+  const [localOrders, setLocalOrders] = useState<Order[]>([]);
 
-  // Check admin session on mount
-  useEffect(() => {
-    checkAdminAuth();
-
-    const handleUnauthorized = () => {
-      setAdminUser(null);
-    };
-
-    window.addEventListener('toyora_unauthorized', handleUnauthorized);
-    return () => window.removeEventListener('toyora_unauthorized', handleUnauthorized);
-  }, []);
-
-  const checkAdminAuth = async () => {
-    setIsCheckingAuth(true);
-    try {
-      const user = await authService.getMe();
-      setAdminUser(user);
-    } catch {
-      setAdminUser(null);
-    } finally {
-      setIsCheckingAuth(false);
-    }
+  const mockAdminUser = {
+    id: 'admin_1',
+    name: 'Store Administrator',
+    email: 'admin@toyora.in',
+    role: 'admin' as const
   };
-
-  useEffect(() => {
-    if (adminUser) {
-      loadOrders();
-    }
-  }, [orders, adminUser]);
 
   const loadOrders = async () => {
     const list = await orderService.getOrders();
     setLocalOrders(list);
   };
 
-  const handleLogout = () => {
-    authService.logout();
-    setAdminUser(null);
-  };
+  useEffect(() => {
+    loadOrders();
+  }, []);
 
   // Product Actions
   const handleSaveProduct = async (productData: any) => {
     if (editingProduct) {
-      const updated = await productService.updateProduct(editingProduct.id, productData);
-      if (updated) {
-        const freshList = await productService.getProducts();
-        setProducts(freshList);
-      }
+      await productService.updateProduct(editingProduct.id, productData);
+      const freshList = await productService.getProducts();
+      setProducts(freshList);
     } else {
       await productService.createProduct(productData);
       const freshList = await productService.getProducts();
@@ -113,21 +81,6 @@ export const AdminView: React.FC = () => {
     await orderService.updateOrderStatus(orderId, status);
     loadOrders();
   };
-
-  // Auth Loading State
-  if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen bg-[#FAF9F5] flex flex-col items-center justify-center space-y-3">
-        <Loader2 className="w-8 h-8 text-[#2D5A27] animate-spin" />
-        <p className="text-sm font-medium text-[#666660]">Verifying admin session...</p>
-      </div>
-    );
-  }
-
-  // Render Login screen if unauthenticated
-  if (!adminUser) {
-    return <AdminLogin onLoginSuccess={(user) => setAdminUser(user)} />;
-  }
 
   // Counts for Badges
   const activeOrdersCount = localOrders.filter(o => o.status === 'pending' || o.status === 'processing').length;
@@ -153,8 +106,10 @@ export const AdminView: React.FC = () => {
         <AdminTopbar
           activeTab={activeTab}
           setIsMobileDrawerOpen={setIsMobileDrawerOpen}
-          adminUser={adminUser}
-          onLogout={handleLogout}
+          adminUser={mockAdminUser}
+          onLogout={() => {
+            window.location.hash = '';
+          }}
           onSelectProduct={(id) => {
             const p = products.find(x => x.id === id);
             if (p) setPreviewProduct(p);
@@ -248,7 +203,7 @@ export const AdminView: React.FC = () => {
         onConfirm={handleDeleteProduct}
         title="Delete Catalogue Product"
         itemName={deletingProduct?.name}
-        message="This will remove the product listing from storefront catalog view and backend database."
+        message="This will remove the product listing from storefront catalog view and local storage."
       />
 
       <OrderDetailDrawer

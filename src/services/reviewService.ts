@@ -1,5 +1,3 @@
-import { api } from '../lib/api';
-
 export interface AdminReview {
   id: string;
   productId: string;
@@ -15,101 +13,122 @@ export interface AdminReview {
   status: 'approved' | 'pending' | 'hidden';
 }
 
-export function mapReviewFromApi(rev: any): AdminReview {
-  const id = rev.reviewId || (rev._id ? String(rev._id) : rev.id);
-  const createdDate = rev.createdAt ? new Date(rev.createdAt) : new Date();
-  const dateStr = createdDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+const STORAGE_KEY = 'toyora_admin_reviews';
 
-  return {
-    id,
-    productId: rev.productId || (rev.product ? String(rev.product) : ''),
-    productName: rev.productName || 'Toyora Product',
-    productImage: rev.productImage || 'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&q=80&w=300',
-    customerName: rev.customerName || 'Verified Customer',
-    customerEmail: rev.customerEmail || '',
-    rating: Number(rev.rating || 5),
-    title: rev.title || '',
-    comment: rev.comment || '',
-    date: dateStr,
-    verifiedPurchase: rev.verifiedPurchase ?? true,
-    status: rev.status || 'pending'
-  };
+const SAMPLE_REVIEWS: AdminReview[] = [
+  {
+    id: 'rev-01',
+    productId: 'toy-01',
+    productName: 'Nordic Solid Beech Rainbow Stacker',
+    productImage: 'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&q=80&w=300',
+    customerName: 'Ananya S.',
+    customerEmail: 'ananya@example.com',
+    rating: 5,
+    title: 'Outstanding quality and endless play',
+    comment: 'My 2-year-old builds bridges and tunnels daily. Heirloom-level craftsmanship.',
+    date: '14 Jan 2026',
+    verifiedPurchase: true,
+    status: 'approved'
+  },
+  {
+    id: 'rev-02',
+    productId: 'toy-02',
+    productName: 'Magna-Architect 100-Piece Magnetic Builder',
+    productImage: 'https://images.unsplash.com/photo-1587654780291-39c9404d746b?auto=format&fit=crop&q=80&w=300',
+    customerName: 'Rohan M.',
+    customerEmail: 'rohan@example.com',
+    rating: 5,
+    title: 'Hours of engineering fun',
+    comment: 'Strong magnets and brilliant colors. Highly recommended!',
+    date: '02 Feb 2026',
+    verifiedPurchase: true,
+    status: 'approved'
+  }
+];
+
+function getStoredReviews(): AdminReview[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading reviews from localStorage:', e);
+  }
+  return SAMPLE_REVIEWS;
+}
+
+function saveStoredReviews(reviews: AdminReview[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));
+  } catch (e) {
+    console.error('Error saving reviews to localStorage:', e);
+  }
 }
 
 class ReviewService {
   public async getReviews(statusFilter?: string): Promise<AdminReview[]> {
-    try {
-      const queryParams: Record<string, string> = {};
-      if (statusFilter && statusFilter !== 'all') {
-        queryParams.status = statusFilter;
-      }
-
-      const res = await api.get('/reviews', queryParams);
-      if (res.success && Array.isArray(res.data)) {
-        return res.data.map(mapReviewFromApi);
-      }
-      return [];
-    } catch (error) {
-      console.error('Failed to fetch reviews from API:', error);
-      return [];
+    let reviews = getStoredReviews();
+    if (statusFilter && statusFilter !== 'all') {
+      reviews = reviews.filter(r => r.status === statusFilter);
     }
+    return reviews;
   }
 
   public async getProductReviews(productId: string): Promise<AdminReview[]> {
-    try {
-      const res = await api.get(`/reviews/product/${encodeURIComponent(productId)}`);
-      if (res.success && Array.isArray(res.data)) {
-        return res.data.map(mapReviewFromApi);
-      }
-      return [];
-    } catch (error) {
-      console.error(`Failed to fetch reviews for product ${productId}:`, error);
-      return [];
-    }
+    const reviews = getStoredReviews();
+    return reviews.filter(r => r.productId === productId && r.status === 'approved');
   }
 
   public async createReview(reviewData: {
     productId: string;
+    productName?: string;
+    productImage?: string;
     customerName: string;
     customerEmail: string;
     rating: number;
     title: string;
     comment: string;
-    childAge?: string;
   }): Promise<AdminReview> {
-    try {
-      const res = await api.post('/reviews', reviewData);
-      if (res.success && res.data) {
-        return mapReviewFromApi(res.data);
-      }
-      throw new Error(res.message || 'Failed to submit review');
-    } catch (error: any) {
-      console.error('Failed to submit review:', error);
-      throw error;
-    }
+    const reviews = getStoredReviews();
+    const newRev: AdminReview = {
+      id: `rev-${Date.now()}`,
+      productId: reviewData.productId,
+      productName: reviewData.productName || 'Toyora Educational Toy',
+      productImage: reviewData.productImage || 'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&q=80&w=300',
+      customerName: reviewData.customerName,
+      customerEmail: reviewData.customerEmail,
+      rating: reviewData.rating,
+      title: reviewData.title,
+      comment: reviewData.comment,
+      date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      verifiedPurchase: true,
+      status: 'pending'
+    };
+    reviews.unshift(newRev);
+    saveStoredReviews(reviews);
+    return newRev;
   }
 
   public async updateReviewStatus(id: string, status: 'approved' | 'pending' | 'hidden'): Promise<AdminReview | null> {
-    try {
-      const res = await api.patch(`/reviews/${encodeURIComponent(id)}/moderation`, { status });
-      if (res.success && res.data) {
-        return mapReviewFromApi(res.data);
-      }
-      return null;
-    } catch (error) {
-      console.error(`Failed to update review moderation ${id}:`, error);
-      return null;
-    }
+    const reviews = getStoredReviews();
+    const idx = reviews.findIndex(r => r.id === id);
+    if (idx === -1) return null;
+
+    reviews[idx].status = status;
+    saveStoredReviews(reviews);
+    return reviews[idx];
   }
 
   public async deleteReview(id: string): Promise<boolean> {
-    try {
-      const res = await api.delete(`/reviews/${encodeURIComponent(id)}`);
-      return Boolean(res.success);
-    } catch (error) {
-      console.error(`Failed to delete review ${id}:`, error);
-      return false;
-    }
+    const reviews = getStoredReviews();
+    const filtered = reviews.filter(r => r.id !== id);
+    if (filtered.length === reviews.length) return false;
+    saveStoredReviews(filtered);
+    return true;
   }
 }
 

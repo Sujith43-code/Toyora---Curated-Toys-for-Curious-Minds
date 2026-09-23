@@ -1,5 +1,5 @@
 import { Product, ProductCategory, AgeBracket, PlayType } from '../types';
-import { api } from '../lib/api';
+import { INITIAL_PRODUCTS } from '../data/products';
 
 export interface ProductFilterParams {
   searchQuery?: string;
@@ -10,162 +10,137 @@ export interface ProductFilterParams {
   sortBy?: 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'rating-desc';
 }
 
-export function mapProductFromApi(item: any): Product {
-  const id = item.productId || (item._id ? String(item._id) : item.id);
-  return {
-    id,
-    slug: item.slug || String(id).toLowerCase(),
-    sku: item.sku || `TYR-${(item.category || 'TOY').substring(0, 3).toUpperCase()}-${String(id).slice(-4).toUpperCase()}`,
-    name: item.name,
-    tagline: item.tagline || '',
-    category: item.category as ProductCategory,
-    ageBracket: item.ageBracket as AgeBracket,
-    ageDisplay: item.ageDisplay || (item.ageBracket === '0-2' ? '0–2 Years' : item.ageBracket === '3-5' ? '3–5 Years' : item.ageBracket === '6-8' ? '6–8 Years' : item.ageBracket === '9-12' ? '9–12 Years' : '12+ Years'),
-    playType: item.playType as PlayType,
-    playroomCollection: item.playroomCollection || '',
-    price: Number(item.price),
-    originalPrice: item.originalPrice !== undefined ? Number(item.originalPrice) : Number(item.price),
-    discountPercent: item.discountPercent,
-    rating: item.rating !== undefined ? Number(item.rating) : 5.0,
-    reviewCount: item.reviewCount !== undefined ? Number(item.reviewCount) : 0,
-    inStock: Boolean(item.inStock),
-    stockCount: Number(item.stockCount ?? 0),
-    isBestSeller: Boolean(item.isBestSeller),
-    isNewArrival: Boolean(item.isNewArrival),
-    isStaffPick: Boolean(item.isStaffPick),
-    isEcoFriendly: Boolean(item.isEcoFriendly),
-    description: item.description || '',
-    developmentalBenefits: Array.isArray(item.developmentalBenefits) ? item.developmentalBenefits : [],
-    features: Array.isArray(item.features) ? item.features : [],
-    specifications: item.specifications || {
-      material: 'Sustainably Sourced Material',
-      dimensions: 'Standard Size',
-      safetyStandards: 'BIS IS-9873, ASTM F963',
-      care: 'Wipe clean with a soft cloth',
-      boxContents: 'Play set with guide'
-    },
-    images: Array.isArray(item.images) && item.images.length > 0 ? item.images : ['https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&q=80&w=800'],
-    reviews: Array.isArray(item.reviews) ? item.reviews : []
-  };
+const STORAGE_KEY = 'toyora_admin_products';
+
+function getStoredProducts(): Product[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading products from localStorage:', e);
+  }
+  return INITIAL_PRODUCTS;
+}
+
+function saveStoredProducts(products: Product[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+  } catch (e) {
+    console.error('Error saving products to localStorage:', e);
+  }
 }
 
 class ProductService {
   public async getProducts(params?: ProductFilterParams): Promise<Product[]> {
-    try {
-      const queryParams: Record<string, string> = {};
+    let products = getStoredProducts();
 
-      if (params?.searchQuery?.trim()) {
-        queryParams.search = params.searchQuery.trim();
-      }
-
-      if (params?.category && params.category !== 'all') {
-        queryParams.category = params.category;
-      }
-
-      if (params?.ageBracket && params.ageBracket !== 'all') {
-        queryParams.age = params.ageBracket;
-      }
-
-      if (params?.playType && params.playType !== 'all') {
-        queryParams.play = params.playType;
-      }
-
-      if (params?.stockStatus === 'in_stock') {
-        queryParams.inStock = 'true';
-      }
-
-      if (params?.sortBy) {
-        if (params.sortBy === 'price-asc') queryParams.sortBy = 'price-asc';
-        else if (params.sortBy === 'price-desc') queryParams.sortBy = 'price-desc';
-        else if (params.sortBy === 'rating-desc') queryParams.sortBy = 'rating';
-      }
-
-      const res = await api.get('/products', queryParams);
-      if (res.success && Array.isArray(res.data)) {
-        let products = res.data.map(mapProductFromApi);
-
-        // Apply client-side refine filters if backend query parameters didn't cover stock status or client-only sort
-        if (params?.stockStatus) {
-          if (params.stockStatus === 'out_of_stock') {
-            products = products.filter((p: Product) => !p.inStock || p.stockCount === 0);
-          } else if (params.stockStatus === 'low_stock') {
-            products = products.filter((p: Product) => p.stockCount > 0 && p.stockCount <= 10);
-          }
-        }
-
-        if (params?.sortBy) {
-          switch (params.sortBy) {
-            case 'name-asc':
-              products.sort((a: Product, b: Product) => a.name.localeCompare(b.name));
-              break;
-            case 'name-desc':
-              products.sort((a: Product, b: Product) => b.name.localeCompare(a.name));
-              break;
-            case 'stock-asc':
-              products.sort((a: Product, b: Product) => a.stockCount - b.stockCount);
-              break;
-            case 'stock-desc':
-              products.sort((a: Product, b: Product) => b.stockCount - a.stockCount);
-              break;
-          }
-        }
-
-        return products;
-      }
-      return [];
-    } catch (error) {
-      console.error('Failed to fetch products from API:', error);
-      return [];
+    if (params?.searchQuery?.trim()) {
+      const q = params.searchQuery.trim().toLowerCase();
+      products = products.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.tagline.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q)
+      );
     }
+
+    if (params?.category && params.category !== 'all') {
+      products = products.filter(p => p.category.toLowerCase() === params.category?.toLowerCase());
+    }
+
+    if (params?.ageBracket && params.ageBracket !== 'all') {
+      products = products.filter(p => p.ageBracket === params.ageBracket);
+    }
+
+    if (params?.playType && params.playType !== 'all') {
+      products = products.filter(p => p.playType?.toLowerCase() === params.playType?.toLowerCase());
+    }
+
+    if (params?.stockStatus) {
+      if (params.stockStatus === 'in_stock') {
+        products = products.filter(p => p.inStock && p.stockCount > 0);
+      } else if (params.stockStatus === 'out_of_stock') {
+        products = products.filter(p => !p.inStock || p.stockCount === 0);
+      } else if (params.stockStatus === 'low_stock') {
+        products = products.filter(p => p.stockCount > 0 && p.stockCount <= 10);
+      }
+    }
+
+    if (params?.sortBy) {
+      switch (params.sortBy) {
+        case 'price-asc':
+          products.sort((a, b) => a.price - b.price);
+          break;
+        case 'price-desc':
+          products.sort((a, b) => b.price - a.price);
+          break;
+        case 'rating-desc':
+          products.sort((a, b) => b.rating - a.rating);
+          break;
+        case 'name-asc':
+          products.sort((a, b) => a.name.localeCompare(b.name));
+          break;
+        case 'name-desc':
+          products.sort((a, b) => b.name.localeCompare(a.name));
+          break;
+        case 'stock-asc':
+          products.sort((a, b) => a.stockCount - b.stockCount);
+          break;
+        case 'stock-desc':
+          products.sort((a, b) => b.stockCount - a.stockCount);
+          break;
+      }
+    }
+
+    return products;
   }
 
   public async getProductById(id: string): Promise<Product | null> {
-    try {
-      const res = await api.get(`/products/${encodeURIComponent(id)}`);
-      if (res.success && res.data) {
-        return mapProductFromApi(res.data);
-      }
-      return null;
-    } catch (error) {
-      console.error(`Failed to fetch product ${id} from API:`, error);
-      return null;
-    }
+    const products = getStoredProducts();
+    const product = products.find(p => p.id === id || p.slug === id.toLowerCase());
+    return product || null;
   }
 
   public async createProduct(productData: Omit<Product, 'id'>): Promise<Product> {
-    try {
-      const res = await api.post('/products', productData);
-      if (res.success && res.data) {
-        return mapProductFromApi(res.data);
-      }
-      throw new Error(res.message || 'Failed to create product');
-    } catch (error: any) {
-      console.error('Failed to create product:', error);
-      throw error;
-    }
+    const products = getStoredProducts();
+    const newId = `toy-${Date.now()}`;
+    const newProduct: Product = {
+      ...productData,
+      id: newId,
+      slug: productData.slug || productData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      sku: productData.sku || `TYR-TOY-${Math.floor(1000 + Math.random() * 9000)}`
+    };
+    products.unshift(newProduct);
+    saveStoredProducts(products);
+    return newProduct;
   }
 
   public async updateProduct(id: string, updates: Partial<Product>): Promise<Product | null> {
-    try {
-      const res = await api.put(`/products/${encodeURIComponent(id)}`, updates);
-      if (res.success && res.data) {
-        return mapProductFromApi(res.data);
-      }
-      return null;
-    } catch (error) {
-      console.error(`Failed to update product ${id}:`, error);
-      return null;
-    }
+    const products = getStoredProducts();
+    const index = products.findIndex(p => p.id === id || p.slug === id.toLowerCase());
+    if (index === -1) return null;
+
+    const updated: Product = {
+      ...products[index],
+      ...updates,
+      id: products[index].id // preserve id
+    };
+    products[index] = updated;
+    saveStoredProducts(products);
+    return updated;
   }
 
   public async deleteProduct(id: string): Promise<boolean> {
-    try {
-      const res = await api.delete(`/products/${encodeURIComponent(id)}`);
-      return Boolean(res.success);
-    } catch (error) {
-      console.error(`Failed to delete product ${id}:`, error);
-      return false;
-    }
+    const products = getStoredProducts();
+    const filtered = products.filter(p => p.id !== id && p.slug !== id.toLowerCase());
+    if (filtered.length === products.length) return false;
+    saveStoredProducts(filtered);
+    return true;
   }
 }
 

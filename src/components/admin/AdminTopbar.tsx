@@ -2,7 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Menu, Search, Bell, ExternalLink, LogOut, ShieldCheck, X } from 'lucide-react';
 import { AdminTab } from './AdminSidebar';
 import { useStore } from '../../context/StoreContext';
-import { AdminUser } from '../../services/authService';
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin';
+}
 
 interface AdminTopbarProps {
   activeTab: AdminTab;

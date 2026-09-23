@@ -1,6 +1,4 @@
-import { Order, OrderStatus, CartItem, Product } from '../types';
-import { api } from '../lib/api';
-import { mapProductFromApi } from './productService';
+import { Order, OrderStatus, CartItem } from '../types';
 
 export interface OrderFilterParams {
   searchQuery?: string;
@@ -9,210 +7,199 @@ export interface OrderFilterParams {
   sortBy?: 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc';
 }
 
-export function mapOrderFromApi(item: any): Order {
-  const id = item.orderId || (item._id ? String(item._id) : item.id);
-  const createdDate = item.createdAt ? new Date(item.createdAt) : new Date();
-  const dateStr = createdDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+const STORAGE_KEY = 'toyora_orders';
 
-  const items: CartItem[] = Array.isArray(item.items)
-    ? item.items.map((it: any) => {
-        let product: Product;
-        if (it.product && typeof it.product === 'object' && it.product.name) {
-          product = mapProductFromApi(it.product);
-        } else {
-          product = {
-            id: it.productId || (it.product ? String(it.product) : 'toy_01'),
-            slug: it.productId || 'toy_01',
-            sku: `TYR-TOY-${(it.productId || '01').slice(-3).toUpperCase()}`,
-            name: it.name || 'Toyora Educational Toy',
-            tagline: 'Quality playroom essential',
-            category: 'Wooden & Montessori',
-            ageBracket: '3-5',
-            ageDisplay: '3 Years+',
-            playType: 'Create',
-            price: Number(it.price || 0),
-            originalPrice: Number(it.price || 0),
-            rating: 4.9,
-            reviewCount: 12,
-            inStock: true,
-            stockCount: 10,
-            description: 'Thoughtfully designed playroom essential.',
-            developmentalBenefits: ['Fine motor skills', 'Creativity'],
-            features: ['Eco-friendly', 'Non-toxic finish'],
-            specifications: {
-              material: 'FSC Certified Wood',
-              dimensions: '25 x 15 cm',
-              safetyStandards: 'BIS IS-9873',
-              care: 'Wipe clean',
-              boxContents: 'Play set'
-            },
-            images: it.image ? [it.image] : ['https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&q=80&w=800'],
-            reviews: []
-          };
-        }
-        return {
-          product,
-          quantity: Number(it.quantity || 1)
-        };
-      })
-    : [];
-
-  const customerDetails = item.customerDetails || item.customer || {};
-  const customer = {
-    fullName: customerDetails.fullName || item.customerName || 'Customer',
-    email: customerDetails.email || item.customerEmail || 'customer@example.com',
-    phone: customerDetails.phone || item.customerPhone || '+91 90000 00000',
-    addressLine1: customerDetails.addressLine1 || item.shippingAddress?.line1 || '',
-    addressLine2: customerDetails.addressLine2 || '',
-    city: customerDetails.city || item.shippingAddress?.city || 'Bengaluru',
-    state: customerDetails.state || item.shippingAddress?.state || 'Karnataka',
-    pincode: customerDetails.pincode || item.shippingAddress?.pincode || '560001',
-    deliveryNotes: customerDetails.deliveryNotes || '',
-    isGift: Boolean(customerDetails.isGift),
-    giftMessage: customerDetails.giftMessage || ''
-  };
-
-  const subtotal = Number(item.subtotal ?? 0);
-  const shipping = Number(item.shipping ?? 0);
-  const discount = Number(item.discount ?? 0);
-  const total = Number(item.total ?? item.totalAmount ?? (subtotal + shipping - discount));
-
-  return {
-    id,
-    createdAt: dateStr,
-    items,
-    customer,
-    customerName: customer.fullName,
-    customerEmail: customer.email,
-    customerPhone: customer.phone,
+const SAMPLE_ORDERS: Order[] = [
+  {
+    id: 'ORD-8921',
+    createdAt: '22 Sep 2026',
+    items: [],
+    customerName: 'Priya Sharma',
+    customerEmail: 'priya.sharma@example.com',
+    customerPhone: '+91 98765 43210',
     shippingAddress: {
-      line1: customer.addressLine1,
-      city: customer.city,
-      state: customer.state,
-      pincode: customer.pincode
+      line1: '42, Prestige Palms, Indiranagar',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      pincode: '560038'
     },
-    subtotal,
-    shipping,
-    discount,
-    total,
-    totalAmount: total,
-    paymentMethod: item.paymentMethod || 'cod',
-    status: item.status || 'pending',
-    trackingNumber: item.trackingNumber || '',
-    estimatedDeliveryDate: item.estimatedDeliveryDate || item.estimatedDelivery || '2–4 Business Days',
-    estimatedDelivery: item.estimatedDelivery || item.estimatedDeliveryDate || '2–4 Business Days'
-  };
+    subtotal: 2499,
+    shipping: 0,
+    discount: 0,
+    total: 2499,
+    totalAmount: 2499,
+    paymentMethod: 'upi',
+    status: 'processing',
+    trackingNumber: 'TRK-IN-99281',
+    estimatedDeliveryDate: '25 Sep 2026',
+    estimatedDelivery: '25 Sep 2026',
+    customer: {
+      fullName: 'Priya Sharma',
+      email: 'priya.sharma@example.com',
+      phone: '+91 98765 43210',
+      addressLine1: '42, Prestige Palms, Indiranagar',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      pincode: '560038'
+    }
+  },
+  {
+    id: 'ORD-8920',
+    createdAt: '21 Sep 2026',
+    items: [],
+    customerName: 'Rahul Verma',
+    customerEmail: 'rahul.verma@example.com',
+    customerPhone: '+91 91234 56789',
+    shippingAddress: {
+      line1: '12/4, Green Park Extension',
+      city: 'New Delhi',
+      state: 'Delhi',
+      pincode: '110016'
+    },
+    subtotal: 1299,
+    shipping: 99,
+    discount: 0,
+    total: 1398,
+    totalAmount: 1398,
+    paymentMethod: 'cod',
+    status: 'pending',
+    trackingNumber: '',
+    estimatedDeliveryDate: '26 Sep 2026',
+    estimatedDelivery: '26 Sep 2026',
+    customer: {
+      fullName: 'Rahul Verma',
+      email: 'rahul.verma@example.com',
+      phone: '+91 91234 56789',
+      addressLine1: '12/4, Green Park Extension',
+      city: 'New Delhi',
+      state: 'Delhi',
+      pincode: '110016'
+    }
+  }
+];
+
+function getStoredOrders(): Order[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading orders from localStorage:', e);
+  }
+  return SAMPLE_ORDERS;
+}
+
+function saveStoredOrders(orders: Order[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+  } catch (e) {
+    console.error('Error saving orders to localStorage:', e);
+  }
 }
 
 class OrderService {
   public async getOrders(params?: OrderFilterParams): Promise<Order[]> {
-    try {
-      const queryParams: Record<string, string> = {};
+    let orders = getStoredOrders();
 
-      if (params?.searchQuery?.trim()) {
-        queryParams.search = params.searchQuery.trim();
-      }
-
-      if (params?.status && params.status !== 'all') {
-        queryParams.status = params.status;
-      }
-
-      const res = await api.get('/orders', queryParams);
-
-      if (res.success && Array.isArray(res.data)) {
-        let orders = res.data.map(mapOrderFromApi);
-
-        if (params?.paymentMethod && params.paymentMethod !== 'all') {
-          orders = orders.filter((o: Order) => o.paymentMethod === params.paymentMethod);
-        }
-
-        if (params?.sortBy) {
-          switch (params.sortBy) {
-            case 'date-desc':
-              orders.sort((a: Order, b: Order) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-              break;
-            case 'date-asc':
-              orders.sort((a: Order, b: Order) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-              break;
-            case 'amount-desc':
-              orders.sort((a: Order, b: Order) => (b.totalAmount || b.total) - (a.totalAmount || a.total));
-              break;
-            case 'amount-asc':
-              orders.sort((a: Order, b: Order) => (a.totalAmount || a.total) - (b.totalAmount || b.total));
-              break;
-          }
-        }
-
-        return orders;
-      }
-      return [];
-    } catch (error) {
-      console.error('Failed to fetch orders from API:', error);
-      return [];
+    if (params?.searchQuery?.trim()) {
+      const q = params.searchQuery.toLowerCase().trim();
+      orders = orders.filter(o =>
+        o.id.toLowerCase().includes(q) ||
+        (o.customerName || '').toLowerCase().includes(q) ||
+        (o.customerEmail || '').toLowerCase().includes(q) ||
+        (o.customerPhone || '').includes(q)
+      );
     }
+
+    if (params?.status && params.status !== 'all') {
+      orders = orders.filter(o => o.status === params.status);
+    }
+
+    if (params?.paymentMethod && params.paymentMethod !== 'all') {
+      orders = orders.filter(o => o.paymentMethod === params.paymentMethod);
+    }
+
+    return orders;
   }
 
   public async getOrderById(id: string): Promise<Order | null> {
-    try {
-      const res = await api.get(`/orders/${encodeURIComponent(id)}`);
-      if (res.success && res.data) {
-        return mapOrderFromApi(res.data);
-      }
-      return null;
-    } catch (error) {
-      console.error(`Failed to fetch order ${id}:`, error);
-      return null;
-    }
+    const orders = getStoredOrders();
+    return orders.find(o => o.id === id) || null;
   }
 
-  public async createOrder(orderPayload: {
-    customer: any;
-    items: { productId: string; quantity: number }[];
-    paymentMethod: string;
-    isGift?: boolean;
-    giftMessage?: string;
-    deliveryNotes?: string;
+  public async createOrder(orderData: {
+    items: CartItem[];
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
+    shippingAddress: { line1: string; city: string; state: string; pincode: string };
+    paymentMethod: 'upi' | 'card' | 'netbanking' | 'cod';
+    subtotal: number;
+    shipping: number;
     discount?: number;
+    total: number;
+    customerDetails?: any;
   }): Promise<Order> {
-    try {
-      const res = await api.post('/orders', orderPayload);
-      if (res.success && res.data) {
-        return mapOrderFromApi(res.data);
+    const orders = getStoredOrders();
+    const id = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+    const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    const newOrder: Order = {
+      id,
+      createdAt: today,
+      items: orderData.items,
+      customerName: orderData.customerName,
+      customerEmail: orderData.customerEmail,
+      customerPhone: orderData.customerPhone,
+      shippingAddress: orderData.shippingAddress,
+      subtotal: orderData.subtotal,
+      shipping: orderData.shipping,
+      discount: orderData.discount || 0,
+      total: orderData.total,
+      totalAmount: orderData.total,
+      paymentMethod: orderData.paymentMethod,
+      status: 'pending',
+      trackingNumber: `TRK-IN-${Math.floor(10000 + Math.random() * 90000)}`,
+      estimatedDeliveryDate: '2–4 Business Days',
+      estimatedDelivery: '2–4 Business Days',
+      customer: orderData.customerDetails || {
+        fullName: orderData.customerName,
+        email: orderData.customerEmail,
+        phone: orderData.customerPhone,
+        addressLine1: orderData.shippingAddress.line1,
+        city: orderData.shippingAddress.city,
+        state: orderData.shippingAddress.state,
+        pincode: orderData.shippingAddress.pincode
       }
-      throw new Error(res.message || 'Failed to create order');
-    } catch (error: any) {
-      console.error('Failed to create order:', error);
-      throw error;
-    }
+    };
+
+    orders.unshift(newOrder);
+    saveStoredOrders(orders);
+    return newOrder;
   }
 
-  public async updateOrderStatus(id: string, status: OrderStatus): Promise<Order | null> {
-    try {
-      const res = await api.put(`/orders/${encodeURIComponent(id)}/status`, { status });
-      if (res.success && res.data) {
-        return mapOrderFromApi(res.data);
-      }
-      return null;
-    } catch (error) {
-      console.error(`Failed to update status for order ${id}:`, error);
-      return null;
-    }
+  public async updateOrderStatus(orderId: string, status: OrderStatus): Promise<Order | null> {
+    const orders = getStoredOrders();
+    const idx = orders.findIndex(o => o.id === orderId);
+    if (idx === -1) return null;
+
+    orders[idx].status = status;
+    saveStoredOrders(orders);
+    return orders[idx];
   }
 
-  public async updateOrderTracking(id: string, trackingNumber: string, estimatedDeliveryDate?: string): Promise<Order | null> {
-    try {
-      const res = await api.put(`/orders/${encodeURIComponent(id)}/tracking`, {
-        trackingNumber,
-        estimatedDeliveryDate
-      });
-      if (res.success && res.data) {
-        return mapOrderFromApi(res.data);
-      }
-      return null;
-    } catch (error) {
-      console.error(`Failed to update tracking for order ${id}:`, error);
-      return null;
-    }
+  public async updateOrderTracking(orderId: string, trackingNumber: string): Promise<Order | null> {
+    const orders = getStoredOrders();
+    const idx = orders.findIndex(o => o.id === orderId);
+    if (idx === -1) return null;
+
+    orders[idx].trackingNumber = trackingNumber;
+    saveStoredOrders(orders);
+    return orders[idx];
   }
 }
 
